@@ -11,11 +11,11 @@
 
 {-# LANGUAGE NamedFieldPuns, ScopedTypeVariables #-}
 
-#if (__GLASGOW_HASKELL__ >= 706)
+
 {-# LANGUAGE RecursiveDo #-}
-#else
-{-# LANGUAGE DoRec #-}
-#endif
+
+
+
 
 module Database.MongoDB.Internal.Protocol (
     FullCollection,
@@ -32,9 +32,9 @@ module Database.MongoDB.Internal.Protocol (
     isClosed, close, ServerData(..), Pipeline(..)
 ) where
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative ((<$>))
-#endif
+
+
+
 import Control.Monad ( forM, replicateM, unless, forever )
 import Data.Binary.Get (Get, runGet)
 import Data.Binary.Put (Put, runPut)
@@ -70,18 +70,18 @@ import Database.MongoDB.Transport (Transport)
 import qualified Database.MongoDB.Transport as Tr
 
 
-#if MIN_VERSION_base(4,6,0)
+
 import Control.Concurrent.MVar.Lifted (MVar, newEmptyMVar, newMVar, withMVar,
                                        putMVar, readMVar, mkWeakMVar, isEmptyMVar)
-#else
-import Control.Concurrent.MVar.Lifted (MVar, newEmptyMVar, newMVar, withMVar,
-                                         putMVar, readMVar, addMVarFinalizer)
-#endif
 
-#if !MIN_VERSION_base(4,6,0)
-mkWeakMVar :: MVar a -> IO () -> IO ()
-mkWeakMVar = addMVarFinalizer
-#endif
+
+
+
+
+
+
+
+
 
 
 -- * Pipeline
@@ -176,7 +176,7 @@ listen Pipeline{..} = do
 psend :: Pipeline -> Message -> IO ()
 -- ^ Send message to destination; the destination must not response (otherwise future 'call's will get these responses instead of their own).
 -- Throw IOError and close pipeline if send fails
-psend p@Pipeline{..} !message = withMVar vStream (flip writeMessage message) `onException` close p
+psend p@Pipeline{..} !message = withMVar vStream (`writeMessage` message) `onException` close p
 
 pcall :: Pipeline -> Message -> IO (IO Response)
 -- ^ Send message to destination and return /promise/ of response from one message only. The destination must reply to the message (otherwise promises will have the wrong responses in them).
@@ -201,11 +201,11 @@ type Pipe = Pipeline
 
 newPipe :: ServerData -> Handle -> IO Pipe
 -- ^ Create pipe over handle
-newPipe sd handle = Tr.fromHandle handle >>= (newPipeWith sd)
+newPipe sd handle = Tr.fromHandle handle >>= newPipeWith sd
 
 newPipeWith :: ServerData -> Transport -> IO Pipe
 -- ^ Create pipe over connection
-newPipeWith sd conn = newPipeline sd conn
+newPipeWith = newPipeline
 
 send :: Pipe -> [Notice] -> IO ()
 -- ^ Send notices as a contiguous batch to server with no reply. Throw IOError if connection fails.
@@ -233,14 +233,14 @@ writeMessage conn (notices, mRequest) = do
     noticeStrings <- forM notices $ \n -> do
           requestId <- genRequestId
           let s = runPut $ putNotice n requestId
-          return $ (lenBytes s) `L.append` s
+          return $ lenBytes s `L.append` s
 
     let requestString = do
           (request, requestId) <- mRequest
           let s = runPut $ putRequest request requestId
-          return $ (lenBytes s) `L.append` s
+          return $ lenBytes s `L.append` s
 
-    Tr.write conn $ L.toStrict $ L.concat $ noticeStrings ++ (maybeToList requestString)
+    Tr.write conn $ L.toStrict $ L.concat $ noticeStrings ++ maybeToList requestString
     Tr.flush conn
  where
     lenBytes bytes = encodeSize . toEnum . fromEnum $ L.length bytes
