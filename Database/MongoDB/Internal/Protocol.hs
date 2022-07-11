@@ -89,7 +89,7 @@ import Control.Concurrent.MVar.Lifted (MVar, newEmptyMVar, newMVar, withMVar,
 -- | Thread-safe and pipelined connection
 data Pipeline = Pipeline
     { vStream :: MVar Transport -- ^ Mutex on handle, so only one thread at a time can write to it
-    , responseQueue :: TChan (MVar (Either IOError Response)) -- ^ Queue of threads waiting for responses. Every time a response arrive we pop the next thread and give it the response.
+    , responseQueue :: TChan (MVar (Either IOError Response)) -- ^ Queue of MVar-s holding either IO errors or responses. Every time a response arrive we pop the next MVar and try to give it the response.
     , listenThread :: ThreadId
     , finished :: MVar ()
     , serverData :: ServerData
@@ -174,12 +174,12 @@ listen Pipeline{..} = do
             Right _ -> return ()
 
 psend :: Pipeline -> Message -> IO ()
--- ^ Send message to destination; the destination must not response (otherwise future 'call's will get these responses instead of their own).
+-- ^ Send message to destination; the destination must not respond (otherwise future 'call's will get these responses instead of their own).
 -- Throw IOError and close pipeline if send fails
 psend p@Pipeline{..} !message = withMVar vStream (`writeMessage` message) `onException` close p
 
 pcall :: Pipeline -> Message -> IO (IO Response)
--- ^ Send message to destination and return /promise/ of response from one message only. The destination must reply to the message (otherwise promises will have the wrong responses in them).
+-- ^ Send message to destination and return a /promise/ of response (i.e. an IO action which the calling thread will have to run to get the enclosed result) from one message only. The destination must reply to the message (otherwise promises will have the wrong responses in them).
 -- Throw IOError and closes pipeline if send fails, likewise for promised response.
 pcall p@Pipeline{..} message = do
   listenerStopped <- isFinished p
@@ -191,7 +191,7 @@ pcall p@Pipeline{..} message = do
         writeMessage stream message
         var <- newEmptyMVar
         liftIO $ atomically $ writeTChan responseQueue var
-        return $ readMVar var >>= either throwIO return -- return promise
+        return $ readMVar var >>= either throwIO return -- return promise, i.e. IO action to be run by the caller to unwrap the result.
 
 -- * Pipe
 
