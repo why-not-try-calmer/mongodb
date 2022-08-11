@@ -2,11 +2,11 @@
 
 {-# LANGUAGE CPP, OverloadedStrings, ScopedTypeVariables, TupleSections #-}
 
-#if (__GLASGOW_HASKELL__ >= 706)
+
 {-# LANGUAGE RecursiveDo #-}
-#else
-{-# LANGUAGE DoRec #-}
-#endif
+
+
+
 
 module Database.MongoDB.Connection (
     -- * Util
@@ -25,11 +25,11 @@ module Database.MongoDB.Connection (
 import Prelude hiding (lookup)
 import Data.IORef (IORef, newIORef, readIORef)
 import Data.List (intersect, partition, (\\), delete)
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, catMaybes)
 
-#if !MIN_VERSION_base(4,8,0)
-import Control.Applicative ((<$>))
-#endif
+
+
+
 
 import Control.Monad (forM_, guard)
 import System.IO.Unsafe (unsafePerformIO)
@@ -39,7 +39,7 @@ import Text.ParserCombinators.Parsec (parse, many1, letter, digit, char, anyChar
 import qualified Data.List as List
 
 
-import Control.Monad.Except (throwError)
+import Control.Monad.Except (throwError, MonadIO)
 import Control.Concurrent.MVar.Lifted (MVar, newMVar, withMVar, modifyMVar,
                                        readMVar)
 import Data.Bson (Document, at, (=:))
@@ -53,8 +53,9 @@ import Database.MongoDB.Internal.Protocol (Pipe, newPipe, close, isClosed)
 import Database.MongoDB.Internal.Util (untilSuccess, liftIOE,
                                        updateAssocs, shuffle, mergesortM)
 import Database.MongoDB.Query (Command, Failure(ConnectionFailure), access,
-                              slaveOk, runCommand, retrieveServerData)
+                              slaveOk, runCommand, retrieveServerData, runCommand1, Action)
 import qualified Database.MongoDB.Transport.Tls as TLS (connect)
+import qualified GHC.TypeLits as T
 
 adminCommand :: Command -> Pipe -> IO Document
 -- ^ Run command against admin database on server connected to pipe. Fail if connection fails.
@@ -76,9 +77,9 @@ showHostPort :: Host -> String
 -- ^ Display host as \"host:port\"
 -- TODO: Distinguish Service port
 showHostPort (Host hostname (PortNumber port)) = hostname ++ ":" ++ show port
-#if !defined(mingw32_HOST_OS) && !defined(cygwin32_HOST_OS) && !defined(_WIN32)
+
 showHostPort (Host _        (UnixSocket path)) = "unix:" ++ path
-#endif
+
 
 readHostPortM :: (MonadFail m) => String -> m Host
 -- ^ Read string \"hostname:port\" as @Host hosthame (PortNumber port)@ or \"hostname\" as @host hostname@ (default port). Fail if string does not match either syntax.
@@ -94,12 +95,12 @@ readHostPortM = either (fail . show) return . parse parser "readHostPort" where
             try (  do port :: Int <- read <$> many1 digit
                       spaces >> eof
                       return $ Host h (PortNumber $ fromIntegral port))
-#if !defined(mingw32_HOST_OS) && !defined(cygwin32_HOST_OS) && !defined(_WIN32)
+
               <|>  do guard (h == "unix")
                       p <- many1 anyChar
                       eof
                       return $ Host "" (UnixSocket p)
-#endif
+
 
 readHostPort :: String -> Host
 -- ^ Read string \"hostname:port\" as @Host hostname (PortNumber port)@ or \"hostname\" as @host hostname@ (default port). Error if string does not match either syntax.
@@ -111,6 +112,35 @@ globalConnectTimeout :: IORef Secs
 -- ^ 'connect' (and 'openReplicaSet') fails if it can't connect within this many seconds (default is 6 seconds). Use 'connect'' (and 'openReplicaSet'') if you want to ignore this global and specify your own timeout. Note, this timeout only applies to initial connection establishment, not when reading/writing to the connection.
 globalConnectTimeout = unsafePerformIO (newIORef 6)
 {-# NOINLINE globalConnectTimeout #-}
+
+driverHello :: Document
+driverHello = 
+    [
+        "hello" =: (1::Int),
+        "helloOk" =: True,
+        "client" =: [
+            "driver" =: ["name" =: ("haskell-mongoDB" :: T.Text), "version" =: ("2.7.1.2" :: T.Text)],
+            "os" =: ["type" =: ("unknown" :: T.Text)]
+        ]
+    ]
+
+handshakeWith :: Maybe Document -> Either T.Text Document
+handshakeWith Nothing = Right driverHello
+handshakeWith (Just client_doc) = 
+    let application = case B.lookup "application" client_doc :: Maybe T.Text of
+            Nothing -> Left "key 'application' not found"
+            Just s -> Right ["application" =: s]
+        platform = case B.lookup "platform" client_doc :: Maybe T.Text of
+            Nothing -> Left "key 'platform' not found"
+            Just s -> Right ["platform" =: s]
+    in  case sequenceA [application, platform] of
+            Left err -> Left err
+            Right ss -> Right $ concat ss ++ driverHello
+
+handshake :: (MonadFail m, MonadIO m) => Maybe Document -> Action m Document
+handshake mb_doc = case handshakeWith mb_doc of
+    Left err -> fail . show $ err
+    Right hs_doc -> runCommand hs_doc
 
 connect :: Host -> IO Pipe
 -- ^ Connect to Host returning pipelined TCP connection. Throw 'IOError' if connection refused or no response within 'globalConnectTimeout'.
@@ -236,7 +266,7 @@ type ReplicaInfo = (Host, Document)
 
 statedPrimary :: ReplicaInfo -> Maybe Host
 -- ^ Primary of replica set or Nothing if there isn't one
-statedPrimary (host', info) = if (at "ismaster" info) then Just host' else readHostPort <$> B.lookup "primary" info
+statedPrimary (host', info) = if at "ismaster" info then Just host' else readHostPort <$> B.lookup "primary" info
 
 possibleHosts :: ReplicaInfo -> [Host]
 -- ^ Non-arbiter, non-hidden members of replica set
@@ -254,7 +284,7 @@ updateMembers rs@(ReplicaSet _ vMembers _ _) = do
     intersection :: (Eq k) => [k] -> [(k, v)] -> (([(k, v)], [(k, v)]), [k])
     intersection keys assocs = (partition (flip elem inKeys . fst) assocs, keys \\ inKeys) where
         assocKeys = map fst assocs
-        inKeys = intersect keys assocKeys
+        inKeys = keys `intersect` assocKeys
 
 fetchReplicaInfo :: ReplicaSet -> (Host, Maybe Pipe) -> IO ReplicaInfo
 -- Connect to host and fetch replica info from host creating new connection if missing or closed (previously failed). Fail if not member of named replica set.
