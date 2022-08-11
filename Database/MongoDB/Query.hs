@@ -385,7 +385,7 @@ allCollections = do
             db <- thisDatabase
             nc <- newCursor db curNs 0 $ return $ Batch Nothing curId firstBatch
             docs <- rest nc
-            return $ mapMaybe (\d -> d !? "name") docs
+            return $ mapMaybe (!? "name") docs
  where
     dropDbPrefix = T.tail . T.dropWhile (/= '.')
     isSpecial db col = T.any (== '$') col && db <.> col /= "local.oplog.$main"
@@ -575,7 +575,7 @@ insertBlock opts col (prevCount, docs) = do
                                               , WriteFailure prevCount (fromMaybe 0 $ lookup "ok" doc) $ show writeConcernErr]
 
 splitAtLimit :: Int -> Int -> [Document] -> [Either Failure [Document]]
-splitAtLimit maxSize maxCount list = chop (go 0 0 []) list
+splitAtLimit maxSize maxCount = chop (go 0 0 [])
   where
     go :: Int -> Int -> [Document] -> [Document] -> (Either Failure [Document], [Document])
     go _ _ res [] = (Right $ reverse res, [])
@@ -1260,7 +1260,7 @@ data Cursor = Cursor FullCollection BatchSize (MVar DelayedBatch)
 -- ^ Iterator over results of a query. Use 'next' to iterate or 'rest' to get all results. A cursor is closed when it is explicitly closed, all results have been read from it, garbage collected, or not used for over 10 minutes (unless 'NoCursorTimeout' option was specified in 'Query'). Reading from a closed cursor raises a 'CursorNotFoundFailure'. Note, a cursor is not closed when the pipe is closed, so you can open another pipe to the same server and continue using the cursor.
 
 newCursor :: MonadIO m => Database -> Collection -> BatchSize -> DelayedBatch -> Action m Cursor
--- ^ Create new cursor. If you don't read all results then close it. Cursor will be closed automatically when all results are read from it or when eventually garbage collected.
+-- ^ Create new cursor. Cursor will be closed automatically when all results are read from it or when eventually garbage collected.
 newCursor db col batchSize dBatch = do
     var <- liftIO $ MV.newMVar dBatch
     let cursor = Cursor (db <.> col) batchSize var
@@ -1359,7 +1359,7 @@ aggregate :: (MonadIO m, MonadFail m) => Collection -> Pipeline -> Action m [Doc
 aggregate aColl agg = do
     aggregateCursor aColl agg def >>= rest
 
-data AggregateConfig = AggregateConfig
+newtype AggregateConfig = AggregateConfig
   { allowDiskUse :: Bool -- ^ Enable writing to temporary files (aggregations have a 100Mb RAM limit)
   }
   deriving Show
@@ -1538,11 +1538,11 @@ mkWeakMVar :: MVar a -> Action IO () -> Action IO (Weak (MVar a))
 mkWeakMVar m closing = do
   ctx <- ask
 
-#if MIN_VERSION_base(4,6,0)
+
   liftIO $ MV.mkWeakMVar m $ runReaderT closing ctx
-#else
-  liftIO $ MV.addMVarFinalizer m $ runReaderT closing ctx
-#endif
+
+
+
 
 
 {- Authors: Tony Hannan <tony@10gen.com>
