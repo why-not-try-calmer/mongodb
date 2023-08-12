@@ -672,17 +672,12 @@ data QueryOption =
     deriving (Show, Eq)
 
 -- *** Binary format
-
-qOpcode :: Request -> Opcode
-qOpcode Query{} = 2004
-qOpcode GetMore{} = 2005
-
 opMsgOpcode :: Opcode
 opMsgOpcode = 2013
 
 putRequest :: Request -> RequestId -> Put
 putRequest request requestId = do
-    putHeader (qOpcode request) requestId
+    putHeader opMsgOpcode requestId
     case request of
         Query{..} -> do
             putInt32 (qBits qOptions)
@@ -731,14 +726,10 @@ data ResponseFlag =
     deriving (Show, Eq, Enum)
 
 -- * Binary format
-
-replyOpcode :: Opcode
-replyOpcode = 1
-
 getReply :: Get (ResponseTo, Reply)
 getReply = do
     (opcode, responseTo) <- getHeader
-    if opcode == 2013
+    if opcode == opMsgOpcode
       then do
             -- Notes:
             -- Checksum bits that are set by the server don't seem to be supported by official drivers.
@@ -750,7 +741,6 @@ getReply = do
                 checksum = Nothing
             return (responseTo, ReplyOpMsg{..})
       else do
-          unless (opcode == replyOpcode) $ fail $ "expected reply opcode (1) but got " ++ show opcode
           rResponseFlags <-  rFlags <$> getInt32
           rCursorId <- getInt64
           rStartingFrom <- getInt32
