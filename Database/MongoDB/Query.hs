@@ -394,7 +394,7 @@ allCollections = do
                 db <- thisDatabase
                 nc <- newCursor db curNs 0 $ return $ Batch Nothing curId firstBatch
                 docs <- rest nc
-                return $ mapMaybe (\d -> d !? "name") docs
+                return $ mapMaybe (!? "name") docs
           else do
             let q = Query [] (Select ["listCollections" =: (1 :: Int)] "$cmd") [] 0 0 [] False 0 []
             qr <- queryRequestOpMsg False q
@@ -402,7 +402,7 @@ allCollections = do
             db <- thisDatabase
             nc <- newCursor db "$cmd" 0 dBatch
             docs <- rest nc
-            return $ mapMaybe (\d -> d !? "name") docs
+            return $ mapMaybe (!? "name") docs
  where
     dropDbPrefix = T.tail . T.dropWhile (/= '.')
     isSpecial db col = T.any (== '$') col && db <.> col /= "local.oplog.$main"
@@ -532,11 +532,11 @@ insert' opts col docs = do
   chunkResults <- interruptibleFor ordered (zip lSums chunks) $ insertBlock opts col
 
   let lchunks = lefts preChunks
-  when (not $ null lchunks) $ do
+  unless (null lchunks) $ do
     liftIO $ throwIO $ head lchunks
 
   let lresults = lefts chunkResults
-  when (not $ null lresults) $ liftIO $ throwIO $ head lresults
+  unless (null lresults) $ liftIO $ throwIO $ head lresults
   return $ concat $ rights chunkResults
 
 insertBlock :: (MonadIO m)
@@ -1326,7 +1326,7 @@ findOne q = do
       then legacyQuery
       else do
         let sd = P.serverData pipe
-        if (maxWireVersion sd < 17)
+        if maxWireVersion sd < 17
           then legacyQuery
           else do
             qr <- queryRequestOpMsg False q {limit = 1}
@@ -1526,7 +1526,7 @@ requestOpMsg pipe (Req r, remainingLimit) params = do
   promise <- liftIOE ConnectionFailure $ P.callOpMsg pipe r Nothing params
   let protectedPromise = liftIOE ConnectionFailure promise
   return $ fromReply remainingLimit =<< protectedPromise
-requestOpMsg _ (Nc _, _) _ = error "requestOpMsg: Only messages of type Query are supported"
+requestOpMsg _ (_, _) _ = error "requestOpMsg: Only messages of type Query are supported"
 
 fromReply :: Maybe Limit -> Reply -> DelayedBatch
 -- ^ Convert Reply to Batch or Failure
@@ -1541,7 +1541,7 @@ fromReply limit Reply{..} = do
         QueryError -> throwIO $ QueryFailure (at "code" $ head rDocuments) (at "$err" $ head rDocuments)
 fromReply limit ReplyOpMsg{..} = do
     let section = head sections
-        cur = maybe Nothing cast $ look "cursor" section
+        cur = cast =<< look "cursor" section
     case cur of
       Nothing -> return (Batch limit 0 sections)
       Just doc ->
@@ -1672,7 +1672,7 @@ aggregate :: (MonadIO m) => Collection -> Pipeline -> Action m [Document]
 aggregate aColl agg = do
     aggregateCursor aColl agg def >>= rest
 
-data AggregateConfig = AggregateConfig
+newtype AggregateConfig = AggregateConfig
   { allowDiskUse :: Bool -- ^ Enable writing to temporary files (aggregations have a 100Mb RAM limit)
   }
   deriving Show
@@ -1705,8 +1705,8 @@ aggregateCursor aColl agg cfg = do
         qr <- queryRequestOpMsg False q
         dBatch <- liftIO $ requestOpMsg pipe qr []
         db <- thisDatabase
-        Right <$> newCursor db aColl 0 dBatch
-           >>= either (liftIO . throwIO . AggregateFailure) return
+        newCursor db aColl 0 dBatch
+           >>= either (liftIO . throwIO . AggregateFailure) return . Right
 
 getCursorFromResponse
   :: (MonadIO m)

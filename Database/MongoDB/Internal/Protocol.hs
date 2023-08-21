@@ -92,7 +92,7 @@ mkWeakMVar = addMVarFinalizer
 -- | Thread-safe and pipelined connection
 data Pipeline = Pipeline
     { vStream :: MVar Transport -- ^ Mutex on handle, so only one thread at a time can write to it
-    , responseQueue :: TChan (MVar (Either IOError Response)) -- ^ Queue of threads waiting for responses. Every time a response arrives we pop the next thread and give it the response.
+    , responseQueue :: TChan (MVar (Either IOError Response)) -- ^ Queue of MVars containing a result (IOError or Response). Every time a response arrives, `listen` reads the next MVar and puts the response in it, while `pcall` blocks on it until the response is ready to be retrieved.    
     , listenThread :: ThreadId
     , finished :: MVar ()
     , serverData :: ServerData
@@ -179,7 +179,7 @@ listen Pipeline{..} = do
             Right _ -> return ()
 
 psend :: Pipeline -> Message -> IO ()
--- ^ Send message to destination; the destination must not response (otherwise future 'call's will get these responses instead of their own).
+-- ^ Send message to destination; the destination must not reply(otherwise future 'call's will get these responses instead of their own).
 -- Throw IOError and close pipeline if send fails
 psend p@Pipeline{..} !message = withMVar vStream (flip writeMessage message) `onException` close p
 
@@ -192,7 +192,7 @@ psendOpMsg p@Pipeline{..} commands flagBit params =
     _ -> error "moreToCome has to be set if no response is expected"
 
 pcall :: Pipeline -> Message -> IO (IO Response)
--- ^ Send message to destination and return /promise/ of response from one message only. The destination must reply to the message (otherwise promises will have the wrong responses in them).
+-- ^ Send message to destination and return /promise/ of response from one message only. It will block until the destination has replied to the message, which it must do (otherwise promises will have the wrong responses in them).
 -- Throw IOError and closes pipeline if send fails, likewise for promised response.
 pcall p@Pipeline{..} message = do
   listenerStopped <- isFinished p
@@ -231,7 +231,7 @@ type Pipe = Pipeline
 
 newPipe :: ServerData -> Handle -> IO Pipe
 -- ^ Create pipe over handle
-newPipe sd handle = Tr.fromHandle handle >>= (newPipeWith sd)
+newPipe sd handle = Tr.fromHandle handle >>= newPipeWith sd
 
 newPipeWith :: ServerData -> Transport -> IO Pipe
 -- ^ Create pipe over connection
@@ -287,7 +287,7 @@ callOpMsg pipe request flagBit params = do
               ReplyOpMsg{..} ->
                 if flagBits == [MoreToCome]
                   then yieldResponses .| foldlC mergeResponses p
-                  else return $ (rt, check reqId p)
+                  else return (rt, check reqId p)
               _ -> error "Impossible" -- see comment above
     yieldResponses = repeatWhileMC
           (do
@@ -302,8 +302,8 @@ callOpMsg pipe request flagBit params = do
             case (r, r') of
                 (ReplyOpMsg _ sec _, ReplyOpMsg _ sec' _) -> do
                     let (section, section') = (head sec, head sec')
-                        (cur, cur') = (maybe Nothing cast $ look "cursor" section,
-                                      maybe Nothing cast $ look "cursor" section')
+                        (cur, cur') = (cast =<< look "cursor" section,
+                                      cast =<< look "cursor" section')
                     case (cur, cur') of
                       (Just doc, Just doc') -> do
                         let (docs, docs') =
@@ -331,14 +331,14 @@ writeMessage conn (notices, mRequest) = do
     noticeStrings <- forM notices $ \n -> do
           requestId <- genRequestId
           let s = runPut $ putNotice n requestId
-          return $ (lenBytes s) `L.append` s
+          return $ lenBytes s `L.append` s
 
     let requestString = do
           (request, requestId) <- mRequest
           let s = runPut $ putRequest request requestId
-          return $ (lenBytes s) `L.append` s
+          return $ lenBytes s `L.append` s
 
-    Tr.write conn $ L.toStrict $ L.concat $ noticeStrings ++ (maybeToList requestString)
+    Tr.write conn $ L.toStrict $ L.concat $ noticeStrings ++ maybeToList requestString
     Tr.flush conn
  where
     lenBytes bytes = encodeSize . toEnum . fromEnum $ L.length bytes
@@ -350,14 +350,14 @@ writeOpMsgMessage conn (notices, mRequest) flagBit params = do
     noticeStrings <- forM notices $ \n -> do
           requestId <- genRequestId
           let s = runPut $ putOpMsg n requestId flagBit params
-          return $ (lenBytes s) `L.append` s
+          return $ lenBytes s `L.append` s
 
     let requestString = do
            (request, requestId) <- mRequest
            let s = runPut $ putOpMsg (Req request) requestId flagBit params
-           return $ (lenBytes s) `L.append` s
+           return $ lenBytes s `L.append` s
 
-    Tr.write conn $ L.toStrict $ L.concat $ noticeStrings ++ (maybeToList requestString)
+    Tr.write conn $ L.toStrict $ L.concat $ noticeStrings ++ maybeToList requestString
     Tr.flush conn
  where
     lenBytes bytes = encodeSize . toEnum . fromEnum $ L.length bytes
@@ -454,15 +454,9 @@ type CursorId = Int64
 
 -- *** Binary format
 
-nOpcode :: Notice -> Opcode
-nOpcode Update{} = 2001
-nOpcode Insert{} = 2002
-nOpcode Delete{} = 2006
-nOpcode KillCursors{} = 2007
-
 putNotice :: Notice -> RequestId -> Put
 putNotice notice requestId = do
-    putHeader (nOpcode notice) requestId
+    putHeader opMsgOpcode requestId
     case notice of
         Insert{..} -> do
             putInt32 (iBits iOptions)
@@ -578,7 +572,7 @@ putOpMsg cmd requestId flagBit params = do
                 let n = T.splitOn "." gFullCollection
                     (db, coll) = (head n, last n)
                     pre = ["getMore" =: gCursorId, "collection" =: coll, "$db" =: db, "batchSize" =: gBatchSize]
-                putInt32 (bit $ bitOpMsg $ ExhaustAllowed)
+                putInt32 (bit $ bitOpMsg ExhaustAllowed)
                 putInt8 0
                 putDocument pre
         Kc k -> case k of
@@ -756,7 +750,7 @@ rFlagsOpMsg :: Int32 -> [FlagBit]
 rFlagsOpMsg bits = isValidFlag bits
   where isValidFlag bt =
           let setBits = map fst $ filter (\(_,b) -> b == True) $ zip ([0..31] :: [Int32]) $ map (testBit bt) [0 .. 31]
-          in if any (\n -> not $ elem n [0,1,16]) setBits
+          in if any (\n -> n `notElem` [0,1,16]) setBits
                then error "Unsopported bit was set"
                else filter (testBit bt . bitOpMsg) [ChecksumPresent ..]
 
