@@ -20,6 +20,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         mongodb_images:
           - mongo:4.0
@@ -36,14 +37,12 @@ jobs:
           stack-version: 'latest'
       
       - name: Setup docker container
-        run: |
-          docker pull ${{ matrix.mongodb_images }}
-          docker run -d -p 27017:27017 ${{ matrix.mongodb_images }}
+        run: docker run -d -p 27017:27017 ${{ matrix.mongodb_images }}
 
       - name: Build and test
         run: stack test --fast
 
-      - name: Test Mongo DB Atlas Free Tier
-        env: ${{ secrets.connection_string }}
-        run: |
-          echo "We need to write a a few lines so that the connection in tests can be done using the connection string"
+      # - name: Test Mongo DB Atlas Free Tier
+      #   env: ${{ secrets.connection_string }}
+      #   run: |
+      #     echo "Need to add method to run tests with MongoDB Atlas connection string"
