@@ -1,0 +1,44 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: haskell-actions/run-ormolu@v14
+  
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        mongodb_images:
+          - mongo:4.0
+          - mongo:5.0
+          - mongo:6.0
+          - mongo:7.0
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Haskell tooling
+        uses: haskell-actions/setup@v2
+        with:
+          enable-stack: true
+          stack-version: 'latest'
+      
+      - name: Setup docker container
+        run: |
+          docker pull ${{ matrix.mongodb_images }}
+          docker run -d -p 27017:27017 ${{ matrix.mongodb_images }}
+
+      - name: Build and test
+        run: stack test --fast
