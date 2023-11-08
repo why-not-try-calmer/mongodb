@@ -42,3 +42,8 @@ jobs:
 
       - name: Build and test
         run: stack test --fast
+
+      - name: Test Mongo DB Atlas Free Tier
+        env: ${{ secrets.connection_string }}
+        run: |
+          echo "We need to write a a few lines so that the connection in tests can be done using the connection string"
