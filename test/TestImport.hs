@@ -7,9 +7,14 @@ module TestImport (
 
 import Test.Hspec as Export hiding (Selector)
 import Database.MongoDB as Export
+import Database.MongoDB.Connection (openReplicaSetSRV', primary)
+import Database.MongoDB.Query (access, auth, master)
+import Control.Monad (unless)
 import Control.Monad.Trans as Export (MonadIO, liftIO) 
+import Control.Exception (ioError)
 import Data.Time (ParseTime, UTCTime)
 import qualified Data.Time as Time
+import qualified Data.Text as T
 
 -- We support the old version of time because it's easier than trying to use
 -- only the new version and test older GHC versions.
@@ -35,3 +40,28 @@ parseDateTime = parseTime (iso8601DateFormat (Just "%H:%M:%S"))
 
 mongodbHostEnvVariable :: String
 mongodbHostEnvVariable = "HASKELL_MONGODB_TEST_HOST"
+
+data MongoAtlas = MongoAtlas {
+  atlas_host :: T.Text,
+  atlas_user :: T.Text,
+  atlas_password :: T.Text
+}
+
+extractMongoAtlasCredentials :: T.Text -> MongoAtlas
+extractMongoAtlasCredentials cs = 
+  let s = T.drop 14 cs
+      [atlas_user, s'] = T.splitOn ":" s
+      [atlas_password, s''] = T.splitOn "@" s'
+      [atlas_host, _] = T.splitOn "/" s''
+  in  MongoAtlas atlas_host atlas_user atlas_host
+
+getPipeFromAtlas :: MongoAtlas -> IO Pipe
+getPipeFromAtlas (MongoAtlas atlas_host _ _) = do
+  repset <- openReplicaSetSRV' $ T.unpack atlas_host
+  pipe <- primary repset
+  pure pipe
+
+loginAtlas :: MongoAtlas -> Pipe -> IO ()
+loginAtlas (MongoAtlas _ user password) p = do
+  isAuth <- access p master "admin" $ auth user password
+  unless isAuth (ioError $ error "Unable to login against MongoDB Atlas!")

@@ -7,7 +7,7 @@ import TestImport
 import Control.Concurrent (threadDelay)
 import Control.Exception
 import Control.Monad (forM_, when)
-import System.Environment (getEnv)
+import System.Environment (getEnv, lookupEnv)
 import System.IO.Error (catchIOError)
 import qualified Data.List as L
 
@@ -18,11 +18,21 @@ testDBName = "mongodb-haskell-test"
 
 db :: Action IO a -> IO a
 db action = do
-    mongodbHost <- getEnv mongodbHostEnvVariable `catchIOError` (\_ -> return "localhost")
-    pipe <- connect (host mongodbHost)
+    maybe_cs <- lookupEnv "connection_string"
+    pipe <- getPipe maybe_cs
     result <- access pipe master testDBName action
     close pipe
     return result
+    where
+        getPipe Nothing = do
+            mongodbHost <- getEnv mongodbHostEnvVariable `catchIOError` (\_ -> return "localhost")
+            pipe <- connect (host mongodbHost)
+            pure pipe
+        getPipe (Just cs) = do
+            let creds = extractMongoAtlasCredentials . T.pack $ cs
+            pipe <- getPipeFromAtlas creds
+            loginAtlas creds pipe
+            pure pipe
 
 getWireVersion :: IO Int
 getWireVersion = db $ do
