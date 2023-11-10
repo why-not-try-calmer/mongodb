@@ -50,10 +50,10 @@ data MongoAtlas = MongoAtlas {
 extractMongoAtlasCredentials :: T.Text -> MongoAtlas
 extractMongoAtlasCredentials cs = 
   let s = T.drop 14 cs
-      [atlas_user, s'] = T.splitOn ":" s
-      [atlas_password, s''] = T.splitOn "@" s'
-      [atlas_host, _] = T.splitOn "/" s''
-  in  MongoAtlas atlas_host atlas_user atlas_host
+      [u, s'] = T.splitOn ":" s
+      [p, s''] = T.splitOn "@" s'
+      [h, _] = T.splitOn "/" s''
+  in  MongoAtlas h u p
 
 getPipeFromAtlas :: MongoAtlas -> IO Pipe
 getPipeFromAtlas (MongoAtlas atlas_host _ _) = do
