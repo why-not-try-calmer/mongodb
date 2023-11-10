@@ -16,17 +16,24 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: haskell-actions/run-ormolu@v14
-  
+
   test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        mongodb_images:
+        mongodb:
           - mongo:4.0
           - mongo:5.0
           - mongo:6.0
           - mongo:7.0
+          - mongo_atlas
+        ghc:
+          - "8.10.4"
+          - "9.0.2"
+          - "9.2.8"
+          - "9.4.7"
+          - latest
     steps:
       - uses: actions/checkout@v3
 
@@ -34,15 +41,18 @@ jobs:
         uses: haskell-actions/setup@v2
         with:
           enable-stack: true
-          stack-version: 'latest'
-      
-      - name: Setup docker container
-        run: docker run -d -p 27017:27017 ${{ matrix.mongodb_images }}
+          ghc-version: ${{ matrix.ghc }}
+          stack-version: latest
 
-      - name: Build and test
-        run: stack test --fast
-
-      # - name: Test Mongo DB Atlas Free Tier
-      #   env: ${{ secrets.connection_string }}
-      #   run: |
-      #     echo "Need to add method to run tests with MongoDB Atlas connection string"
+      - name: Setup container and run tests
+        run: |
+          # the job-level 'if' expression is evaluated before the matrix variable
+          # so it cannot be used to configure this step
+          if [[ ${{ matrix.mongodb }} = "mongo_atlas" ]]
+          then 
+            export connection_string=${{ secrets.CONNECTION_STRING }}
+          else
+            docker run -d -p 27017:27017 ${{ matrix.mongodb }}
+          fi
+          # build & run tests
+          stack test --fast
