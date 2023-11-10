@@ -31,8 +31,6 @@ jobs:
         ghc:
           - "8.10.4"
           - "9.0.2"
-          - "9.2.8"
-          - "9.4.7"
           - latest
     steps:
       - uses: actions/checkout@v3
