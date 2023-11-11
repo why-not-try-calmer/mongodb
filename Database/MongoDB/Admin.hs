@@ -1,30 +1,68 @@
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
+
 -- | Database administrative functions
-
-{-# LANGUAGE CPP, FlexibleContexts, OverloadedStrings, RecordWildCards #-}
-
 module Database.MongoDB.Admin (
     -- * Admin
+
     -- ** Collection
-    CollectionOption(..), createCollection, renameCollection, dropCollection,
+    CollectionOption (..),
+    createCollection,
+    renameCollection,
+    dropCollection,
     validateCollection,
+
     -- ** Index
-    Index(..), IndexName, index, ensureIndex, createIndex, dropIndex,
-    getIndexes, dropIndexes,
+    Index (..),
+    IndexName,
+    index,
+    ensureIndex,
+    createIndex,
+    dropIndex,
+    getIndexes,
+    dropIndexes,
+
     -- ** User
-    allUsers, addUser, removeUser,
+    allUsers,
+    addUser,
+    removeUser,
+
     -- ** Database
-    admin, cloneDatabase, copyDatabase, dropDatabase, repairDatabase,
+    admin,
+    cloneDatabase,
+    copyDatabase,
+    dropDatabase,
+    repairDatabase,
+
     -- ** Server
-    serverBuildInfo, serverVersion,
+    serverBuildInfo,
+    serverVersion,
+
     -- * Diagnotics
+
     -- ** Collection
-    collectionStats, dataSize, storageSize, totalIndexSize, totalSize,
+    collectionStats,
+    dataSize,
+    storageSize,
+    totalIndexSize,
+    totalSize,
+
     -- ** Profiling
-    ProfilingLevel(..), getProfilingLevel, MilliSec, setProfilingLevel,
+    ProfilingLevel (..),
+    getProfilingLevel,
+    MilliSec,
+    setProfilingLevel,
+
     -- ** Database
-    dbStats, OpNum, currentOp, killOp,
+    dbStats,
+    OpNum,
+    currentOp,
+    killOp,
+
     -- ** Server
-    serverStatus
+    serverStatus,
 ) where
 
 import Prelude hiding (lookup)
@@ -32,7 +70,7 @@ import Prelude hiding (lookup)
 import Control.Applicative ((<$>))
 #endif
 import Control.Concurrent (forkIO, threadDelay)
-import Control.Monad (forever, unless, liftM)
+import Control.Monad (forever, liftM, unless)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Maybe (maybeToList)
 import Data.Set (Set)
@@ -42,24 +80,41 @@ import qualified Data.HashTable.IO as H
 import qualified Data.Set as Set
 
 import Control.Monad.Trans (MonadIO, liftIO)
-import Data.Bson (Document, Field(..), at, (=:), (=?), exclude, merge)
+import Data.Bson (Document, Field (..), at, exclude, merge, (=:), (=?))
 import Data.Text (Text)
 
 import qualified Data.Text as T
 
 import Database.MongoDB.Connection (Host, showHostPort)
 import Database.MongoDB.Internal.Protocol (pwHash, pwKey)
-import Database.MongoDB.Internal.Util ((<.>), true1)
-import Database.MongoDB.Query (Action, Database, Collection, Username, Password,
-                               Order, Query(..), accessMode, master, runCommand,
-                               useDb, thisDatabase, rest, select, find, findOne,
-                               insert_, save, delete)
+import Database.MongoDB.Internal.Util (true1, (<.>))
+import Database.MongoDB.Query (
+    Action,
+    Collection,
+    Database,
+    Order,
+    Password,
+    Query (..),
+    Username,
+    accessMode,
+    delete,
+    find,
+    findOne,
+    insert_,
+    master,
+    rest,
+    runCommand,
+    save,
+    select,
+    thisDatabase,
+    useDb,
+ )
 
 -- * Admin
 
 -- ** Collection
 
-data CollectionOption = Capped | MaxByteSize Int | MaxItems Int  deriving (Show, Eq)
+data CollectionOption = Capped | MaxByteSize Int | MaxItems Int deriving (Show, Eq)
 
 coptElem :: CollectionOption -> Field
 coptElem Capped = "capped" =: True
@@ -81,9 +136,12 @@ dropCollection :: (MonadIO m, MonadFail m) => Collection -> Action m Bool
 dropCollection coll = do
     resetIndexCache
     r <- runCommand ["drop" =: coll]
-    if true1 "ok" r then return True else do
-        if at "errmsg" r == ("ns not found" :: Text) then return False else
-            fail $ "dropCollection failed: " ++ show r
+    if true1 "ok" r
+        then return True
+        else do
+            if at "errmsg" r == ("ns not found" :: Text)
+                then return False
+                else fail $ "dropCollection failed: " ++ show r
 
 validateCollection :: (MonadIO m) => Collection -> Action m Document
 -- ^ Validate the given collection, scanning the data and indexes for correctness. This operation takes a while.
@@ -93,39 +151,45 @@ validateCollection coll = runCommand ["validate" =: coll]
 
 type IndexName = Text
 
-data Index = Index {
-    iColl :: Collection,
-    iKey :: Order,
-    iName :: IndexName,
-    iUnique :: Bool,
-    iDropDups :: Bool,
-    iExpireAfterSeconds :: Maybe Int
-    } deriving (Show, Eq)
+data Index = Index
+    { iColl :: Collection
+    , iKey :: Order
+    , iName :: IndexName
+    , iUnique :: Bool
+    , iDropDups :: Bool
+    , iExpireAfterSeconds :: Maybe Int
+    }
+    deriving (Show, Eq)
 
 idxDocument :: Index -> Database -> Document
-idxDocument Index{..} db = [
-    "ns" =: db <.> iColl,
-    "key" =: iKey,
-    "name" =: iName,
-    "unique" =: iUnique,
-    "dropDups" =: iDropDups ] ++ (maybeToList $ fmap ((=:) "expireAfterSeconds") iExpireAfterSeconds)
+idxDocument Index{..} db =
+    [ "ns" =: db <.> iColl
+    , "key" =: iKey
+    , "name" =: iName
+    , "unique" =: iUnique
+    , "dropDups" =: iDropDups
+    ]
+        ++ (maybeToList $ fmap ((=:) "expireAfterSeconds") iExpireAfterSeconds)
 
 index :: Collection -> Order -> Index
 -- ^ Spec of index of ordered keys on collection. 'iName' is generated from keys. 'iUnique' and 'iDropDups' are @False@.
 index coll keys = Index coll keys (genName keys) False False Nothing
 
 genName :: Order -> IndexName
-genName keys = T.intercalate "_" (map f keys)  where
+genName keys = T.intercalate "_" (map f keys)
+  where
     f (k := v) = k `T.append` "_" `T.append` T.pack (show v)
 
 ensureIndex :: (MonadIO m) => Index -> Action m ()
 -- ^ Create index if we did not already create one. May be called repeatedly with practically no performance hit, because we remember if we already called this for the same index (although this memory gets wiped out every 15 minutes, in case another client drops the index and we want to create it again).
-ensureIndex idx = let k = (iColl idx, iName idx) in do
-    icache <- fetchIndexCache
-    set <- liftIO (readIORef icache)
-    unless (Set.member k set) $ do
-        accessMode master (createIndex idx)
-        liftIO $ writeIORef icache (Set.insert k set)
+ensureIndex idx =
+    let k = (iColl idx, iName idx)
+     in do
+            icache <- fetchIndexCache
+            set <- liftIO (readIORef icache)
+            unless (Set.member k set) $ do
+                accessMode master (createIndex idx)
+                liftIO $ writeIORef icache (Set.insert k set)
 
 createIndex :: (MonadIO m) => Index -> Action m ()
 -- ^ Create index on the server. This call goes to the server every time.
@@ -137,7 +201,7 @@ dropIndex coll idxName = do
     resetIndexCache
     runCommand ["deleteIndexes" =: coll, "index" =: idxName]
 
-getIndexes :: MonadIO m => Collection -> Action m [Document]
+getIndexes :: (MonadIO m) => Collection -> Action m [Document]
 -- ^ Get all indexes on this collection
 getIndexes coll = do
     db <- thisDatabase
@@ -176,7 +240,7 @@ fetchIndexCache = do
     liftIO $ do
         mc <- H.lookup dbIndexCache db
         maybe (newIdxCache db) return mc
- where
+  where
     newIdxCache db = do
         idx <- newIORef Set.empty
         H.insert dbIndexCache db idx
@@ -190,21 +254,31 @@ resetIndexCache = do
 
 -- ** User
 
-allUsers :: MonadIO m => Action m [Document]
+allUsers :: (MonadIO m) => Action m [Document]
 -- ^ Fetch all users of this database
-allUsers = map (exclude ["_id"]) `liftM` (rest =<< find
-    (select [] "system.users") {sort = ["user" =: (1 :: Int)], project = ["user" =: (1 :: Int), "readOnly" =: (1 :: Int)]})
+allUsers =
+    map (exclude ["_id"])
+        `liftM` ( rest
+                    =<< find
+                        (select [] "system.users"){sort = ["user" =: (1 :: Int)], project = ["user" =: (1 :: Int), "readOnly" =: (1 :: Int)]}
+                )
 
-addUser :: (MonadIO m)
-        => Bool -> Username -> Password -> Action m ()
+addUser ::
+    (MonadIO m) =>
+    Bool ->
+    Username ->
+    Password ->
+    Action m ()
 -- ^ Add user with password with read-only access if the boolean argument is @True@, or read-write access if it's @False@
 addUser readOnly user pass = do
     mu <- findOne (select ["user" =: user] "system.users")
     let usr = merge ["readOnly" =: readOnly, "pwd" =: pwHash user pass] (maybe ["user" =: user] id mu)
     save "system.users" usr
 
-removeUser :: (MonadIO m)
-           => Username -> Action m ()
+removeUser ::
+    (MonadIO m) =>
+    Username ->
+    Action m ()
 removeUser user = delete (select ["user" =: user] "system.users")
 
 -- ** Database
@@ -265,21 +339,24 @@ totalIndexSize :: (MonadIO m) => Collection -> Action m Int
 -- ^ The total size in bytes of all indexes in this collection.
 totalIndexSize c = at "totalIndexSize" `liftM` collectionStats c
 
-totalSize :: MonadIO m => Collection -> Action m Int
+totalSize :: (MonadIO m) => Collection -> Action m Int
 totalSize coll = do
     x <- storageSize coll
     xs <- mapM isize =<< getIndexes coll
     return (foldl (+) x xs)
- where
+  where
     isize idx = at "storageSize" `liftM` collectionStats (coll `T.append` ".$" `T.append` at "name" idx)
 
 -- ** Profiling
 
 -- | The available profiler levels.
 data ProfilingLevel
-    = Off -- ^ No data collection.
-    | Slow -- ^ Data collected only for slow operations. The slow operation time threshold is 100ms by default, but can be changed using 'setProfilingLevel'.
-    | All -- ^ Data collected for all operations.
+    = -- | No data collection.
+      Off
+    | -- | Data collected only for slow operations. The slow operation time threshold is 100ms by default, but can be changed using 'setProfilingLevel'.
+      Slow
+    | -- | Data collected for all operations.
+      All
     deriving (Show, Enum, Eq)
 
 getProfilingLevel :: (MonadIO m) => Action m ProfilingLevel
@@ -315,7 +392,6 @@ killOp op = findOne (select ["op" =: op] "$cmd.sys.killop")
 serverStatus :: (MonadIO m) => Action m Document
 -- ^ Return a document with an overview of the state of the database.
 serverStatus = useDb admin $ runCommand ["serverStatus" =: (1 :: Int)]
-
 
 {- Authors: Tony Hannan <tony@10gen.com>
    Copyright 2011 10gen Inc.

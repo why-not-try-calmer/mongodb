@@ -1,13 +1,28 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Main (main) where
 
-import Database.MongoDB    (Action, Document, Document, Value, access,
-                            close, connect, delete, exclude, find,
-                            host, insertMany, master, project, rest,
-                            select, sort, (=:))
+import Database.MongoDB (
+    Action,
+    Document,
+    Value,
+    access,
+    close,
+    connect,
+    delete,
+    exclude,
+    find,
+    host,
+    insertMany,
+    master,
+    project,
+    rest,
+    select,
+    sort,
+    (=:),
+ )
 
 #if (__GLASGOW_HASKELL__ >= 800)
 import Control.Monad.IO.Class (liftIO)
@@ -34,20 +49,23 @@ clearTeams :: Action IO ()
 clearTeams = delete (select [] "team")
 
 insertTeams :: Action IO [Value]
-insertTeams = insertMany "team" [
-    ["name" =: "Yankees", "home" =: ["city" =: "New York", "state" =: "NY"], "league" =: "American"],
-    ["name" =: "Mets", "home" =: ["city" =: "New York", "state" =: "NY"], "league" =: "National"],
-    ["name" =: "Phillies", "home" =: ["city" =: "Philadelphia", "state" =: "PA"], "league" =: "National"],
-    ["name" =: "Red Sox", "home" =: ["city" =: "Boston", "state" =: "MA"], "league" =: "American"] ]
+insertTeams =
+    insertMany
+        "team"
+        [ ["name" =: "Yankees", "home" =: ["city" =: "New York", "state" =: "NY"], "league" =: "American"]
+        , ["name" =: "Mets", "home" =: ["city" =: "New York", "state" =: "NY"], "league" =: "National"]
+        , ["name" =: "Phillies", "home" =: ["city" =: "Philadelphia", "state" =: "PA"], "league" =: "National"]
+        , ["name" =: "Red Sox", "home" =: ["city" =: "Boston", "state" =: "MA"], "league" =: "American"]
+        ]
 
 allTeams :: Action IO [Document]
-allTeams = rest =<< find (select [] "team") {sort = ["home.city" =: 1]}
+allTeams = rest =<< find (select [] "team"){sort = ["home.city" =: 1]}
 
 nationalLeagueTeams :: Action IO [Document]
 nationalLeagueTeams = rest =<< find (select ["league" =: "National"] "team")
 
 newYorkTeams :: Action IO [Document]
-newYorkTeams = rest =<< find (select ["home.state" =: "NY"] "team") {project = ["name" =: 1, "league" =: 1]}
+newYorkTeams = rest =<< find (select ["home.state" =: "NY"] "team"){project = ["name" =: 1, "league" =: 1]}
 
 printDocs :: String -> [Document] -> Action IO ()
 printDocs title docs = liftIO $ putStrLn title >> mapM_ (print . exclude ["_id"]) docs

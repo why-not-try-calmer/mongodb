@@ -31,9 +31,9 @@ import Network.HTTP.Types.URI (parseQueryText)
 -- Used to ease compatibility between older and newer network versions.
 data PortID = PortNumber N.PortNumber
 #if !defined(mingw32_HOST_OS) && !defined(cygwin32_HOST_OS) && !defined(_WIN32)
-            | UnixSocket String
+    | UnixSocket String
 #endif
-            deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show)
 
 
 #if !MIN_VERSION_network(2, 9, 0)

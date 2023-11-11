@@ -135,9 +135,9 @@ newPipeline serverData stream = do
 
     rec
         let pipe = Pipeline{..}
-        listenThread <- forkUnmaskedFinally (listen pipe) $ \_ -> do
-                                                              putMVar finished ()
-                                                              drainReplies
+        listenThread <- forkUnmaskedFinally 
+            (listen pipe) 
+            (\_ -> putMVar finished () >> drainReplies)
 
     _ <- mkWeakMVar vStream $ do
         killThread listenThread
