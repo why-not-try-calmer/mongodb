@@ -49,6 +49,8 @@ data MongoAtlas = MongoAtlas {
 
 extractMongoAtlasCredentials :: T.Text -> MongoAtlas
 extractMongoAtlasCredentials cs = 
+-- Mongo Atlas connection strings meet the schema: 
+-- `mongodb+srv://< user >:< password >@< host >/?retryWrites=true&w=majority`
   let s = T.drop 14 cs
       [u, s'] = T.splitOn ":" s
       [p, s''] = T.splitOn "@" s'
