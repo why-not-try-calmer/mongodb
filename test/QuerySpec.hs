@@ -88,18 +88,18 @@ fineGrainedBigDocument = (flip map) [1 .. 1000] $ \i -> (fromString $ "team" ++ 
 hugeDocument :: Document
 hugeDocument = (flip map) [1 .. 1000000] $ \i -> (fromString $ "team" ++ (show i)) =: ("team " ++ (show i) ++ " name")
 
-testUser :: (String, String)
+testUser :: (T.Text, T.Text)
 testUser = ("test_user", "123")
 
-createTestUser :: Action m ()
+createTestUser :: (MonadIO m) => Action m ()
 createTestUser =
   let (username, password) = testUser
-   in addUser False user_name password
+   in addUser False username password
 
-authAsTestUser :: Action m Bool
+authAsTestUser :: (MonadIO m) => Action m Bool
 authAsTestUser =
   let (username, password) = testUser
-   in auth user_name password
+   in auth username password
 
 spec :: Spec
 spec = around withCleanDatabase $ do
@@ -110,8 +110,7 @@ spec = around withCleanDatabase $ do
       db (useDb anotherDBName thisDatabase) `shouldReturn` anotherDBName
 
   describe "createUser" $ do
-    it "creates a new user with r+w rights" $ do
-      _ <- db createTestUser
+    it "creates a new user with r+w rights" $ db createTestUser
 
   describe "authAsTestUser" $ do
     it "logs in as the previously created user" $ do
