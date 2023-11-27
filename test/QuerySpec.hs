@@ -92,14 +92,14 @@ testUser :: (String, String)
 testUser = ("test_user", "123")
 
 createTestUser :: Action m ()
-createTestUser = 
+createTestUser =
     let (username, password) = testUser
-    in  addUser False user_name password
+     in addUser False user_name password
 
 authAsTestUser :: Action m Bool
-authAsTestUser = 
+authAsTestUser =
     let (username, password) = testUser
-    in  auth user_name password
+     in auth user_name password
 
 spec :: Spec
 spec = around withCleanDatabase $ do
