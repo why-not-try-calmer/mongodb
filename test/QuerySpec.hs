@@ -93,12 +93,12 @@ testUser = ("test_user", "123")
 
 createTestUser :: Action m ()
 createTestUser = 
-    let username, password = testUser
+    let (username, password) = testUser
     in  addUser False user_name password
 
 authAsTestUser :: Action m Bool
 authAsTestUser = 
-    let username, password = testUser
+    let (username, password) = testUser
     in  auth user_name password
 
 spec :: Spec
