@@ -2228,9 +2228,9 @@ mkWeakMVar :: MVar a -> Action IO () -> Action IO (Weak (MVar a))
 mkWeakMVar m closing = do
   ctx <- ask
 #if MIN_VERSION_base(4,6,0)
-    liftIO $ MV.mkWeakMVar m $ runReaderT closing ctx
+  liftIO $ MV.mkWeakMVar m $ runReaderT closing ctx
 #else
-    liftIO $ MV.addMVarFinalizer m $ runReaderT closing ctx
+  liftIO $ MV.addMVarFinalizer m $ runReaderT closing ctx
 #endif
 
 {- Authors: Tony Hannan <tony@10gen.com>

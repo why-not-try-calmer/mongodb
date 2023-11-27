@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -174,18 +175,17 @@ newPipeline serverData stream = do
                   Nothing
                   Nothing
             drainReplies
-
-  rec $ do
+{- FOURMOLU_DISABLE -}
+  rec
     let pipe = Pipeline{..}
-    listenThread <-
-      forkUnmaskedFinally
-        (listen pipe)
-        (\_ -> putMVar finished () >> drainReplies)
-
+    listenThread <- forkUnmaskedFinally
+      (listen pipe)
+      (\_ -> putMVar finished () >> drainReplies)
   _ <- mkWeakMVar vStream $ do
     killThread listenThread
     Tr.close stream
   return pipe
+{- FOURMOLU_ENABLE -}
 
 isFinished :: Pipeline -> IO Bool
 isFinished Pipeline{finished} = do

@@ -174,15 +174,19 @@ connect :: Host -> IO Pipe
 -- ^ Connect to Host returning pipelined TCP connection. Throw 'IOError' if connection refused or no response within 'globalConnectTimeout'.
 connect h = readIORef globalConnectTimeout >>= flip connect' h
 
+{- FOURMOLU_DISABLE -}
+
 connect' :: Secs -> Host -> IO Pipe
 -- ^ Connect to Host returning pipelined TCP connection. Throw 'IOError' if connection refused or no response within given number of seconds.
 connect' timeoutSecs (Host hostname port) = do
   mh <- timeout (round $ timeoutSecs * 1000000) (connectTo hostname port)
   handle <- maybe (ioError $ userError "connect timed out") return mh
-  rec $ do
+  rec
     p <- newPipe sd handle
     sd <- access p slaveOk "admin" retrieveServerData
   return p
+
+{- FOURMOLU_ENABLE -}
 
 -- * Replica Set
 

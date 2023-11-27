@@ -63,12 +63,13 @@ connectWithTlsParams :: TLS.ClientParams -> HostName -> PortID -> IO Pipe
 connectWithTlsParams clientParams host port = bracketOnError (connectTo host port) hClose $ \handle -> do
   context <- TLS.contextNew handle clientParams
   TLS.handshake context
-
+{- FOURMOLU_DISABLE -}
   conn <- tlsConnection context
-  rec $ do
+  rec
     p <- newPipeWith sd conn
     sd <- access p slaveOk "admin" retrieveServerData
   return p
+{- FOURMOLU_DISABLE -}
 
 tlsConnection :: TLS.Context -> IO Transport
 tlsConnection ctx = do

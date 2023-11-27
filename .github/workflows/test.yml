@@ -18,6 +18,8 @@ jobs:
       - uses: haskell-actions/run-fourmolu@v9
         with:
           version: "0.14.1.0"
+          pattern: Database/**/*.hs
+          extra-args: --indentation 2
   test:
     runs-on: ubuntu-latest
     strategy:
