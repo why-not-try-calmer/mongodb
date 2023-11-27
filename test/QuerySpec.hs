@@ -88,6 +88,19 @@ fineGrainedBigDocument = (flip map) [1 .. 1000] $ \i -> (fromString $ "team" ++ 
 hugeDocument :: Document
 hugeDocument = (flip map) [1 .. 1000000] $ \i -> (fromString $ "team" ++ (show i)) =: ("team " ++ (show i) ++ " name")
 
+testUser :: (String, String)
+testUser = ("test_user", "123")
+
+createTestUser :: Action m ()
+createTestUser = 
+    let username, password = testUser
+    in  addUser False user_name password
+
+authAsTestUser :: Action m Bool
+authAsTestUser = 
+    let username, password = testUser
+    in  auth user_name password
+
 spec :: Spec
 spec = around withCleanDatabase $ do
     describe "useDb" $ do
@@ -95,6 +108,15 @@ spec = around withCleanDatabase $ do
             let anotherDBName = "another-mongodb-haskell-test"
             db thisDatabase `shouldReturn` testDBName
             db (useDb anotherDBName thisDatabase) `shouldReturn` anotherDBName
+
+    describe "createUser" $ do
+        it "creates a new user with r+w rights" $ do
+            _ <- db createTestUser
+
+    describe "authAsTestUser" $ do
+        it "logs in as the previously created user" $ do
+            is_logged_in <- db $ authAsTestUser
+            is_logged_in `shouldBe` True
 
     describe "collectionWithDot" $ do
         it "uses a collection with dots in the name" $ do
