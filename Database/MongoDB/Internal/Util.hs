@@ -44,11 +44,11 @@ mergeM :: (Monad m) => (a -> a -> m Ordering) -> [a] -> [a] -> m [a]
 mergeM _ [] ys = return ys
 mergeM _ xs [] = return xs
 mergeM cmp (x : xs) (y : ys) =
-    do
-        c <- x `cmp` y
-        case c of
-            GT -> liftM (y :) (mergeM cmp (x : xs) ys)
-            _ -> liftM (x :) (mergeM cmp xs (y : ys))
+  do
+    c <- x `cmp` y
+    case c of
+      GT -> liftM (y :) (mergeM cmp (x : xs) ys)
+      _ -> liftM (x :) (mergeM cmp xs (y : ys))
 
 wrap :: a -> [a]
 wrap x = [x]
@@ -84,8 +84,8 @@ liftIOE f = liftIO . handle (throwIO . f)
 updateAssocs :: (Eq k) => k -> v -> [(k, v)] -> [(k, v)]
 -- ^ Change or insert value of key in association list
 updateAssocs key valu assocs = case back of [] -> (key, valu) : front; _ : back' -> front ++ (key, valu) : back'
-  where
-    (front, back) = break ((key ==) . fst) assocs
+ where
+  (front, back) = break ((key ==) . fst) assocs
 
 bitOr :: (Num a, Bits a) => [a] -> a
 -- ^ bit-or all numbers together
@@ -101,11 +101,11 @@ splitDot t = let (pre, post) = T.break (== '.') t in (pre, T.drop 1 post)
 true1 :: Label -> Document -> Bool
 -- ^ Is field's value a 1 or True (MongoDB use both Int and Bools for truth values). Error if field not in document or field not a Num or Bool.
 true1 k doc = case valueAt k doc of
-    Bool b -> b
-    Float n -> n == 1
-    Int32 n -> n == 1
-    Int64 n -> n == 1
-    _ -> error $ "expected " ++ show k ++ " to be Num or Bool in " ++ show doc
+  Bool b -> b
+  Float n -> n == 1
+  Int32 n -> n == 1
+  Int64 n -> n == 1
+  _ -> error $ "expected " ++ show k ++ " to be Num or Bool in " ++ show doc
 
 byteStringHex :: S.ByteString -> String
 -- ^ Hexadecimal string representation of a byte string. Each byte yields two hexadecimal characters.

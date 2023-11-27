@@ -50,10 +50,10 @@ printDocs title docs = liftIO $ putStrLn title >> mapM_ (print . exclude [\"_id\
 @
 -}
 module Database.MongoDB (
-    module Data.Bson,
-    module Database.MongoDB.Connection,
-    module Database.MongoDB.Query,
-    module Database.MongoDB.Admin,
+  module Data.Bson,
+  module Database.MongoDB.Connection,
+  module Database.MongoDB.Query,
+  module Database.MongoDB.Admin,
 ) where
 
 import Data.Bson

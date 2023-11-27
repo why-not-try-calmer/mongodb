@@ -10,8 +10,8 @@ This module defines a connection interface. It could be a regular
 network connection, TLS connection, a mock or anything else.
 -}
 module Database.MongoDB.Transport (
-    Transport (..),
-    fromHandle,
+  Transport (..),
+  fromHandle,
 ) where
 
 import Data.ByteString (ByteString)
@@ -24,19 +24,19 @@ import Prelude hiding (read)
 `read` should return `ByteString.null` on EOF
 -}
 data Transport = Transport
-    { read :: Int -> IO ByteString
-    , write :: ByteString -> IO ()
-    , flush :: IO ()
-    , close :: IO ()
-    }
+  { read :: Int -> IO ByteString
+  , write :: ByteString -> IO ()
+  , flush :: IO ()
+  , close :: IO ()
+  }
 
 fromHandle :: Handle -> IO Transport
 -- ^ Make connection from handle
 fromHandle handle = do
-    return
-        Transport
-            { read = ByteString.hGet handle
-            , write = ByteString.hPut handle
-            , flush = hFlush handle
-            , close = hClose handle
-            }
+  return
+    Transport
+      { read = ByteString.hGet handle
+      , write = ByteString.hPut handle
+      , flush = hFlush handle
+      , close = hClose handle
+      }

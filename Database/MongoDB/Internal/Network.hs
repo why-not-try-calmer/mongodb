@@ -1,8 +1,15 @@
--- | Compatibility layer for network package, including newtype 'PortID'
-{-# LANGUAGE CPP, OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE OverloadedStrings #-}
 
-module Database.MongoDB.Internal.Network (Host(..), PortID(..), N.HostName, connectTo, 
-                                          lookupReplicaSetName, lookupSeedList) where
+-- | Compatibility layer for network package, including newtype 'PortID'
+module Database.MongoDB.Internal.Network (
+  Host (..),
+  PortID (..),
+  N.HostName,
+  connectTo,
+  lookupReplicaSetName,
+  lookupSeedList,
+) where
 
 #if !MIN_VERSION_network(2, 9, 0)
 
@@ -26,15 +33,17 @@ import Network.DNS.Lookup (lookupSRV, lookupTXT)
 import Network.DNS.Resolver (defaultResolvConf, makeResolvSeed, withResolver)
 import Network.HTTP.Types.URI (parseQueryText)
 
+{- FOURMOLU_DISABLE -}
 
 -- | Wraps network's 'PortNumber'
 -- Used to ease compatibility between older and newer network versions.
-data PortID = PortNumber N.PortNumber
+data PortID =  PortNumber N.PortNumber
 #if !defined(mingw32_HOST_OS) && !defined(cygwin32_HOST_OS) && !defined(_WIN32)
-    | UnixSocket String
+  | UnixSocket String
 #endif
-    deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show)
 
+{- FOURMOLU_ENABLE -}
 
 #if !MIN_VERSION_network(2, 9, 0)
 
@@ -81,26 +90,31 @@ connectTo _ (UnixSocket path) = do
 
 -- * Host
 
-data Host = Host N.HostName PortID  deriving (Show, Eq, Ord)
+data Host = Host N.HostName PortID deriving (Show, Eq, Ord)
 
 lookupReplicaSetName :: N.HostName -> IO (Maybe Text)
 -- ^ Retrieves the replica set name from the TXT DNS record for the given hostname
-lookupReplicaSetName hostname = do 
+lookupReplicaSetName hostname = do
   rs <- makeResolvSeed defaultResolvConf
   res <- withResolver rs $ \resolver -> lookupTXT resolver (pack hostname)
-  case res of 
-    Left _ -> pure Nothing 
-    Right [] -> pure Nothing 
-    Right (x:_) ->
+  case res of
+    Left _ -> pure Nothing
+    Right [] -> pure Nothing
+    Right (x : _) ->
       pure $ fromMaybe (Nothing :: Maybe Text) (lookup "replicaSet" $ parseQueryText x)
 
 lookupSeedList :: N.HostName -> IO [Host]
 -- ^ Retrieves the replica set seed list from the SRV DNS record for the given hostname
-lookupSeedList hostname = do 
+lookupSeedList hostname = do
   rs <- makeResolvSeed defaultResolvConf
   res <- withResolver rs $ \resolver -> lookupSRV resolver $ pack $ "_mongodb._tcp." ++ hostname
-  case res of 
+  case res of
     Left _ -> pure []
-    Right srv -> pure $ map (\(_, _, por, tar) -> 
-      let tar' = dropWhileEnd (=='.') (unpack tar) 
-      in Host tar' (PortNumber . fromIntegral $ por)) srv
+    Right srv ->
+      pure $
+        map
+          ( \(_, _, por, tar) ->
+              let tar' = dropWhileEnd (== '.') (unpack tar)
+               in Host tar' (PortNumber . fromIntegral $ por)
+          )
+          srv

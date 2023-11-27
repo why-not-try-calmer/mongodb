@@ -14,10 +14,10 @@ import TestImport
 
 main :: IO ()
 main = do
-    mongodbHost <- getEnv mongodbHostEnvVariable `catchIOError` (\_ -> return "localhost")
-    mongo_atlas <- lookupEnv "connection_string"
-    unless (isJust mongo_atlas) $ do
-        p <- connect $ host mongodbHost
-        version <- access p slaveOk "admin" serverVersion
-        putStrLn $ "Running tests with mongodb version: " ++ (unpack version)
-        hspecWith defaultConfig Spec.spec
+  mongodbHost <- getEnv mongodbHostEnvVariable `catchIOError` (\_ -> return "localhost")
+  mongo_atlas <- lookupEnv "connection_string"
+  unless (isJust mongo_atlas) $ do
+    p <- connect $ host mongodbHost
+    version <- access p slaveOk "admin" serverVersion
+    putStrLn $ "Running tests with mongodb version: " ++ (unpack version)
+    hspecWith defaultConfig Spec.spec
