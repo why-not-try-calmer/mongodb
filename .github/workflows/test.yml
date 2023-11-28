@@ -33,7 +33,7 @@ jobs:
           - mongo_atlas
         ghc:
           - "8.10.4"
-          - "9.0.2"
+          - "9.4.7" # oldest version with HLS support
           - latest
     steps:
       - uses: actions/checkout@v3
